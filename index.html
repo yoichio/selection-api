@@ -180,6 +180,11 @@
             <li> Ditto to <var>range extent node</var> and <var>range extent offset</var>.</li>
             <li>Return DirectionalRange of <var>range base node</var>, <var>range base offset</var>, <var>range extent node</var> and <var>range extent offset</var>. </li>
           </ol>
+          <div class=note>
+            If no closed ShadowRoot in document, getRange() must return exact <a>base</a> and <a>extent</a>.
+            If there is a closed ShadowRoot ancestor of each node, this method adopts the host node of shadowest closed ShadowRoot.
+            If web author has a reference of a closed ShadowRoot, getRange(closedRoot) return as the ShadowRoot is open.
+          </div>
         </dd>
 
         <dt><dfn>clear</dfn></dt>
@@ -190,8 +195,9 @@
 
         <dt><dfn>setBaseAndExtent</dfn></dt>
         <dd>
-          <p>The method must follow these steps:</p>
-          <ol>
+          <p>The method must set <a>context object</a>'s <a>directional range</a> following these steps:</p>
+          <p>TBD</p>
+          <!--ol>
             <li>If <var>baseOffset</var> is longer than <var>baseNode</var>'s <a>length</a>
               or if <var>extentOffset</var> is longer than <var>extentNode</var>'s <a>length</a>,
               throw an <a>IndexSizeError</a> exception and abort these steps.</li>
@@ -207,33 +213,11 @@
             <li>Set the <a>context object</a>'s <a>range</a> to <var>newRange</var>.</li>
             <li>If <var>extent</var> is <a>before</a> <var>base</var>, set <a>context object</a>'s <a>direction</a> to <a>backwards</a>.
               Otherwise, set it to <a>forwards</a></li>
-          </ol>
+          </ol -->
         </dd>
       </dl>
 
-      <p class=note>See also <a href="https://mxr.mozilla.org/mozilla/source/content/base/public/nsISelection.idl">nsISelection.idl</a> from Gecko.
-        This spec doesn't have everything from there yet, in particular selectionLanguageChange() and containsNode() are missing.
-        They are missing because I couldn't work out how to define them in terms of Ranges.</p>
-
-      <div class=note>
-        <p>Originally, the Selection interface was a Netscape feature.
-          The original implementation was carried on into Gecko (Firefox), and the feature was later implemented independently by other browser engines.
-          The Netscape implementation always allowed multiple ranges in a single selection, for instance so the user could select a column of a table
-          However, multi-range selections proved to be an unpleasant corner case
-          that web developers didn't know about and even Gecko developers rarely handled correctly.
-          Other browser engines never implemented the feature, and clamped selections to a single range in various incompatible fashions.</p>
-
-        <p>This specification follows non-Gecko engines in restricting selections to at most one range,
-          but the API was still originally designed for selections with arbitrary numbers of ranges.
-          This explains oddities like the coexistence of <code>removeRange()</code> and <code>removeAllRanges()</code>,
-          and a <code>getRangeAt()</code> method that takes an integer argument that must always be zero.</p>
-      </div>
-
-      <p>All of the members of the <code>Selection</code> interface are defined
-        in terms of operations on the <code><a>range</a></code> object (if any) represented by the object.
-        These operations can raise exceptions, as defined for the <a href="https://www.w3.org/TR/dom/#range"><code>Range</code></a> ([[!DOM]]) interface;
-        this can therefore result in the members of the <a>Selection</a> interface raising exceptions as well,
-        in addition to any explicitly called out below.</p>
+      
     </section>
 
     <section>
@@ -242,46 +226,19 @@
       <p>This specification extends several interfaces to provide entry points to the
       interfaces defined in this specification.</p>
 
-      <section data-dfn-for="Document">
-        <h3>Extensions to <code>Document</code> interface</h3>
+      <section data-dfn-for="Window">
+        <h3>Extensions to <code>Window</code> interface</h3>
         <pre class="idl">
-          partial interface Document {
-            Selection ? getSelection();
+          partial interface Window {
+            FrameSelection ? getFrameSelection();
           };
         </pre>
         <dl>
-          <dt><dfn>getSelection()</dfn></dt>
+          <dt><dfn>getFrameSelection()</dfn></dt>
           <dd>
             <p>The method must return the <a>selection</a> associated with <a>context object</a>
               if the <a>context object</a> has an associated <a>browsing context</a>,
               and it must return <code>null</code> otherwise.</p>
-          </dd>
-        </dl>
-        <p class=note data-link-for="Document">
-          If we create a Document object with no browsing context
-          (say via <code>document.implementation.createHTMLDocument("")</code> and call <a>getSelection</a> on it),
-          IE9 seems to return a different Selection object.
-          Firefox 12.0a1 and Opera Next 12.00 alpha return the same object as for the current window.
-          Chrome 17 dev returns null.
-          See <a href="https://lists.w3.org/Archives/Public/public-webapps/2012JanMar/0159.html">discussion</a>.
-          There's no meaningful selection associated with such a document, so we follow WebKit and require returning <code>null</code>.</p>
-      </section>
-
-      <section data-dfn-for="Window">
-        <h3>Extensions to <code>Window</code> interface</h3>
-        <p>
-          The <code><dfn>Window</dfn></code> interface is defined in [[!HTML]].
-        </p>
-        <pre class="idl">
-          partial interface Window {
-            Selection? getSelection();
-          };
-        </pre>
-        <dl>
-          <dt><dfn>getSelection()</dfn></dt>
-          <dd>
-            <p data-link-for="Window">The method must invoke and return the result of <a>getSelection</a> on the <a>context object</a>'s
-            <a href="https://www.w3.org/TR/html5/browsers.html#dom-document-0"><code>document</code></a> ([[!HTML]]) property.</p>
           </dd>
         </dl>
       </section>
@@ -291,30 +248,7 @@
         <p>
           The <code><dfn>GlobalEventHandlers</dfn></code> interface is defined in [[!HTML]].
         </p>
-        <pre class="idl">
-          partial interface GlobalEventHandlers {
-            attribute EventHandler onselectstart;
-            attribute EventHandler onselectionchange;
-          };
-        </pre>
-        <dl>
-          <dt><dfn>onselectstart</dfn></dt>
-          <dd>
-            <p>The attribute must be an <a href="https://html.spec.whatwg.org/#event-handler-idl-attributess">event handler IDL attribute</a>
-            for the <a>selectstart</a> event supported by
-            all <a href="https://html.spec.whatwg.org/#html-elements">HTML elements</a>,
-            <a href="https://html.spec.whatwg.org/#the-document-object">Document</a> objects,
-            and <a href="https://html.spec.whatwg.org/#the-window-object">Window</a> objects.</p>
-          </dd>
-          <dt><dfn>onselectionchange</dfn></dt>
-          <dd>
-            <p>The attribute must be an <a href="https://html.spec.whatwg.org/#event-handler-idl-attributess">event handler IDL attribute</a>
-            for the <a>selectionchange</a> event supported by
-            all <a href="https://html.spec.whatwg.org/#html-elements">HTML elements</a>,
-            <a href="https://html.spec.whatwg.org/#the-document-object">Document</a> objects,
-            and <a href="https://html.spec.whatwg.org/#the-window-object">Window</a> objects.</p>
-          </dd>
-        </dl>
+        <p>TBD.</p>
       </section>
 
     </section>
@@ -324,46 +258,10 @@
 
       <p>The user agent should allow the user to change the <a>selection</a> associated with the <dfn>active document</dfn>
         (<a href="https://www.w3.org/TR/html5/browsers.html#active-document">defined</a> in [[!HTML]]).
-        If the user makes any modification to a <a>selection</a>, the user agent must create a new <a>range</a> with suitable
-        <a href="https://www.w3.org/TR/dom/#concept-range-start"><dfn id="range-start">start</dfn></a> and 
-        <a href="https://www.w3.org/TR/dom/#concept-range-end"><dfn id="range-end">end</dfn></a> of the <a>range</a> ([[!DOM]])
-        and associate the <a>selection</a> with this new <a>range</a> (not modify the existing <a>range</a>),
-        and set update <a>selection</a>'s <a>direction</a> to <a>forwards</a> if the <a>start</a> is <a>before</a> or equal to the <a>end</a>,
-        <a>backwards</a> if if the <a>end</a> is <a>before</a> the <a>start</a>,
-        or <a>directionless</a> if the <a>start</a> and the <a>end</a> cannot be ordered due to the platform convention.</p>
+        If the user makes any modification to a <a>selection</a>, <a>FrameSelection</a> must refer the updated <a>selection</a>.
 
       <p>The user agent must not make a <a>selection</a> <a>empty</a> if it was not already <a>empty</a>
         in response to any user actions (e.g. clicking on a non-editable region).</p>
-
-      <p class=note>See <a href="https://www.w3.org/Bugs/Public/show_bug.cgi?id=15470">bug 15470</a>.
-        IE9 and Opera Next 12.00 alpha allow the user to reset the range to null after the fact by clicking somewhere;
-        Firefox 12.0a1 and Chrome 17 dev do not.
-        I follow Gecko/WebKit, because it lessens the chance of getRangeAt(0) throwing.</p>
-
-      <section>
-        <h3><code><dfn>selectstart</dfn></code> event</h3>
-
-        <p>When the user agent is about to associate a new range <var>newRange</var> to the <a>selection</a> in response to a user initiated action,
-          the user agent must <dfn><a href="https://www.w3.org/TR/dom/#concept-event-fire">fire</a></dfn> ([[!DOM]])
-          an event with the name <code>selectstart</code>, which bubbles and is cancelable</a>,
-          at the <a>node</a> associated with the <a>boundary point</a> of <var>newRange</var>'s <a>start</a>
-          prior to changing the selection if the <a>selection</a> was previously <a>empty</a>
-          or the previously associated range was <a>collapsed</a>.</p>
-
-        <p>If the event is canceled, the user agent must not change the <a>selection</a>.</p>
-
-        <p>The user agent must not <a>fire</a> the event when the user agent sets the <a>selection</a> <a>empty</a>.</p>
-      </section>
-
-      <section>
-        <h3><code><dfn>selectionchange</dfn></code> event</h3>
-
-        <p>When the <a>selection</a> is dissociated with its <a>range</a>, associated with a new <a>range</a>
-          or the associated <a>range</a>'s <a>boundary point</a> is mutated either by the user or the content script,
-          the user agent must <dfn><a href="https://www.w3.org/html/wg/drafts/html/master/webappapis.html#queue-a-task">queue a task</a></dfn>
-          to <a>fire</a> an event with the name <code>selectionchange</code>, which does not bubble and is not cancelable</a>,
-          at the <a>document</a> associated with the <a>selection</a>.</p>
-      </section>
 
     </section>
 
@@ -371,14 +269,8 @@
       <h2>Acknowledgements</h2>
       <p>Many thanks to</p>
       <ul>
-        <li><p>Aryeh Gregor, who is the original author of this specification as well as <a href="https://dvcs.w3.org/hg/editing/raw-file/tip/editing.html">HTML Editing API specification</a>.</p></li>
-        <li><p>Contributors to the <a href="https://dvcs.w3.org/hg/editing/raw-file/tip/editing.html">HTML Editing API specification</a> - 
-          Ehsan Akhgari, Tab Atkins, Mathias Bynens, Tim Down, Markus Ernst, Daniel Glazman, Tali Gregor (née Fuss),
-          Stig Halvorsen, Jeff Harris, Ian Hickson, Cameron Heavon-Jones, Anne van Kesteren, Alfonso Martínez de Lizarrondo,
-          Glenn Maynard, Ms2ger, Robert O'Callahan, Julie Parent, Simon Pieters, Michael A. Puls II,
-          Rich Schwerdtfeger, Jonas Sicking, Henri Sivonen, Smylers, Hallvord R. M. Steen, Roland Steiner, Annie Sullivan,
-          timeless, Ojan Vafai, Brett Zamir, and Boris Zbarsky for their feedback, participation, or other helpful contributions</p></li>
-        <li>Robin Berjon for making our lives so much easier with his cool tool.</li>
+        <li><p>Ryosuke Niwa, who is the original author of <a href="http://w3c.github.io/selection-api/">Selection API</a>.</p></li>
+        <li>TBD. </li>
     </section>
 
   </body>
