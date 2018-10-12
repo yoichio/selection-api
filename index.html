@@ -1,37 +1,37 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Selection API</title>
+    <title>FrameSelection API</title>
     <meta charset='utf-8'>
     <script src='https://www.w3.org/Tools/respec/respec-w3c-common' async class='remove'></script>
     <script class='remove'>
       var respecConfig = {
         specStatus: "ED",
-        shortName: "selection-api",
+        shortName: "frameselection",
         editors: [
           {
-            name: "Ryosuke Niwa",
-            mailto: "rniwa@apple.com",
-            company: "Apple Inc.",
-            companyURL: "https://www.apple.com/",
-            w3cid: "49910",
+            name: "Yoichi Osato",
+            mailto: "yoichio@google.com",
+            company: "Google Inc.",
+            companyURL: "https://www.google.com/",
+            w3cid: "49814",
           },
         ],
         wg: "Web Platform Working Group",
         wgURI: "https://www.w3.org/WebPlatform/WG/",
         wgPublicList: "public-webapps",
         wgPatentURI: "https://www.w3.org/2004/01/pp-impl/83482/status",
-        testSuiteURI: "https://github.com/web-platform-tests/wpt/tree/master/selection",
-        github: "https://github.com/w3c/selection-api",
+        testSuiteURI: "TBD",
+        github: "TBD",
       };
     </script>
   </head>
   <body>
     <section id='abstract'>
       <p>
-        This document is a preliminary draft of a specification for the Selection API and selection related functionality.
-        It replaces a couple of old sections of the <a href="https://www.w3.org/TR/html5/">HTML specification</a>,
-        the selection part of the old <a href="https://www.w3.org/TR/2000/REC-DOM-Level-2-Traversal-Range-20001113/ranges.html">DOM Range specification</a>.
+        This document is a preliminary draft of a specification for the FrameSelection API and selection related functionality.
+        FrameSelection enables web authors to get/set selection
+        considering <a href="https://www.w3.org/TR/dom41/#dom-element-attachshadow">Shadow DOM</a>.
       </p>
       <p>
 	This document defines APIs for selection, which allows users and authors to select a portion of a document or specify a point of interest for copy, paste, and other editing operations.
@@ -46,35 +46,29 @@
       </p>
 
       <p>
-        This specification is based on the <a href="https://dvcs.w3.org/hg/editing/raw-file/tip/editing.html">HTML Editing API specification</a>
-        edited by Aryeh Gregor.
+        This specification is based on the <a href="http://w3c.github.io/selection-api/">Selection API</a>
+        edited by Ryosuke Niwa.
       </p>
     </section>
 
     <section class="informative">
       <h2>Background</h2>
 
-      <p>IE9 and Firefox 6.0a2 allow arbitrary ranges in the selection, which follows what this spec originally said.
-        However, this leads to unpleasant corner cases that authors, implementers, and spec writers all have to deal with,
-        and they don't make any real sense.  Chrome 14 dev and Opera 11.11 aggressively normalize selections,
-        like not letting them lie inside empty elements and things like that, but this is also viewed as a bad idea,
-        because it takes flexibility away from authors.</p>
+      <p>Chrome69, Safari12 and Firefox64 support Shadow DOM.
+        However, current Selection API specifies that there is single selection in a document and the selection is bound to
+         single <a href="https://dom.spec.whatwg.org/#range">Range</a>, which can't represent a range crossing shadow boundary. <br>
+        Chrome69 supports user selection crossing/inside shadow and copy/paste but web authors can't get the selected nodes through
+        Selection API because of the limitation. document.getSelection() and shadowRoot.getSelection() only work well if selection is only inside each tree scope. <br>
+        Safari12 supports user selection crossing/inside shadow and it doesn't support shadowRoot.getSelection(). <br>
+        Firefox64 supports user selection inside shadow and it doesn't support shadowRoot.getSelection(). <br>
+        Since current Selection API deeply depends on Range, it is hard to update existing Selection API following shadow tree.</p>
 
-      <p>So I changed the spec to a made-up compromise that allows some simplification but doesn't constrain authors much.
-        See <a href="https://lists.w3.org/Archives/Public/public-whatwg-archive/2011Jun/0193.html">discussion</a>.
-        Basically it would throw exceptions in some places to try to stop the selection from containing a range that had
-        a boundary point other than an Element or Text node, or a boundary point that didn't descend from a Document.</p>
+      <p>So I suggest new selection API that lets web authors to get/set user selection including shadow.</p>
 
-      <p>But this meant getRangeAt() had to start returning a copy, not a reference.
-        Also, it would be prone to things failing weirdly in corner cases. Perhaps most significantly, all sorts of problems
-        might arise when DOM mutations transpire, like if a boundary point's node is removed from its parent and
-        the mutation rules would place the new boundary point inside a non-Text/Element node.
-        And finally, the previously-specified behavior had the advantage of matching two major implementations,
-        while the new behavior matched no one.  So I changed it back.</p>
+      <p> Multiple range and selection reaction to DOM mutation is TBD.</p>
 
       <div class=note>
-      <p>See <a href="https://www.w3.org/Bugs/Public/show_bug.cgi?id=15470">bug 15470</a>. IE9, Firefox 12.0a1, Chrome 17 dev,
-        and Opera Next 12.00 alpha all make the range initially null.</p>
+      <p>See <a href="https://github.com/w3c/webcomponents/issues/79">webcomponents issue 79</a> for more history and detail.</p>
       </div>
     </section>
 
@@ -95,365 +89,125 @@
     <section>
       <h2>Definition</h2>
 
-      <p>Every <dfn><a href="https://www.w3.org/TR/dom/#document">document</a></dfn> ([[!DOM]]) with
-        a <dfn><a href="https://www.w3.org/TR/html5/browsers.html#browsing-context">browsing context</a></dfn> ([[!HTML]])
+      <p>Every 
+          <dfn><a href="https://html.spec.whatwg.org/multipage/window-object.html#the-window-object">window</a></dfn> ([[!HTML]])
+         which associates a <dfn><a href="https://www.w3.org/TR/dom/#document">document</a></dfn> ([[!DOM]])
+        in a <dfn><a href="https://www.w3.org/TR/html5/browsers.html#browsing-context">browsing context</a></dfn> ([[!HTML]])
         has a unique <dfn>selection</dfn> associated with it.</p>
 
-      <p class=note>This is a requirement of the HTML spec.
-        IE9 and Opera Next 12.00 alpha seem to follow it, while Firefox 12.0a1 and Chrome 17 dev seem not to.
-        See <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=717339">Mozilla bug</a>,
-        <a href="https://bugs.webkit.org/show_bug.cgi?id=76114">WebKit bug</a>.</p>
+      <p><dfn>Directional range</dfn> is range that has two <a href="https://www.w3.org/TR/dom/#concept-range-bp"><dfn>boundary point</dfn></a>s: <dfn>base</dfn> and <dfn>extent</dfn>.</p>
+      <p class=note>base node and extent node can be in different node tree and no order consraint between them unlike DOM <dfn data-cite="!DOM#range">range</dfn>.</p>
 
-      <p>This one <a>selection</a> must be shared by all the content of the <a>document</a>
-        (though not by nested <a>document</a>s), including any editing hosts in the document.
-        <dfn data-cite="!HTML#editing-host">Editing hosts</dfn> that are not
-        inside a <a>document</a> cannot have a <a>selection</a></p>
+      <p>This one <a>selection</a> must be shared by all the content of the <a>document</a> and its shadow tree
+        (though not by nested <a>browsing context</a>s)</p>
 
-      <p>Each <a>selection</a> can be associated with a single <dfn data-cite="!DOM#range">range</dfn>.
-        When there is no <a>range</a> associated with the <a>selection</a>, the </a>selection</a> is <dfn>empty</dfn>.
-        The selection must be initially <a>empty</a>.</p>
+      <p>Each <a>selection</a> can be associated with a single <a>directional range</a>.
+          When there is no <a>directional range</a> associated with the <a>selection</a>, the </a>selection</a> is <dfn>empty</dfn>.
+          The selection must be initially <a>empty</a>.</p>
 
-      <p class=note>A <a>document</a>'s <a>selection</a> is a singleton object associated with that <a>document</a>,
-        so it gets replaced with a new object when <code>Document.open()</code> is called.
-        See <a href="https://www.w3.org/Bugs/Public/show_bug.cgi?id=15470">bug 15470</a>.
-        IE9 and Opera Next 12.00 alpha allow the user to reset the range to null after the fact by clicking somewhere;
-        Firefox 12.0a1 and Chrome 17 dev do not.
-        We follow Gecko/WebKit, because it lessens the chance of getRangeAt(0) throwing.</p>
-
-      <p>Once a <a>selection</a> is associated with a given <a>range</a>,
-        it must continue to be associated with that same <a>range</a> until this specification requires otherwise.</p>
-
-      <p class=note>For instance, if the DOM changes in a way that changes the range's boundary points,
-        or a script modifies the boundary points of the range, the same range object must continue to be associated with the selection.
-        However, if the user changes the selection or a script calls <code>addRange()</code>,
-        the selection must be associated with a new range object, as required elsewhere in this specification.</p>
-
-      <p>If the <a>selection</a>'s <a>range</a> is not null and is
-        <dfn data-cite="!DOM#dom-range-collapsed">collapsed</dfn>,
-        then the caret position must be at that <a>range</a>'s <a href="https://www.w3.org/TR/dom/#concept-range-bp"><dfn>boundary point</dfn></a>.
-        When the <a>selection</a> is not empty, this specification does not define the caret position;
-        user agents should follow platform conventions in deciding whether the caret is at the start of the <a>selection</a>,
-        the end of the <a>selection</a>, or somewhere else.
-
-      <p class=note>This short-changes Mac users. See <a href="https://www.w3.org/Bugs/Public/show_bug.cgi?id=13909">bug 13909</a>.
-
-      <p>Each <a>selection</a> has a <dfn>direction</dfn>, <dfn>forwards</dfn>, <dfn>backwards</dfn>, or <dfn>directionless</dfn>.
-        If the user creates a <a>selection</a> by indicating first one <a>boundary point</a> of the <a>range</a>
-        and then the other (such as by clicking on one point and dragging to another),
-        and the first indicated <a>boundary point</a> is <a href="https://www.w3.org/TR/dom/#concept-range-bp-after"><dfn>after</dfn></a> ([[!DOM]]) the second,
-        then the corresponding <a>selection</a> must initially be <a>backwards</a>.
-        If the first indicated <a>boundary point</a> is <a href="https://www.w3.org/TR/dom/#concept-range-bp-before"><dfn>before</dfn></a> ([[!DOM]]) the second,
-        then the corresponding <a>selection</a> must initially be <a>forwards</a>.
-        Otherwise, it must be <a>directionless</a>.</p>
-
-      <p>Each <a>selection</a>s also have an <dfn>anchor</dfn> and a <dfn>focus</dfn>.
-        If the <a>selection</a>'s <a>range</a> is null, its <a>anchor</a> and <a>focus</a> are both null.
-        If the <a>selection</a>'s <a>range</a> is not null and its <a>direction</a> is <a>forwards</a>, its <a>anchor</a> is the <a>range</a>'s
-        <a>start</a>, and its <a>focus</a> is the <a>end</a>.
-        Otherwise, its <a>focus</a> is the <a>start</a> and its <a>anchor</a> is the <a>end</a>.</p>
     </section>
 
-    <section data-dfn-for="Selection">
-      <h2>Selection interface</h2>
-      <p><a>Selection</a> interface provides a way to interact with the <a>selection</a>
-        associated with each document.
-      </p>
+    <section data-dfn-for="DirectionalRange">
+      <h2>DirectionalRange interface</h3>
+      <p>DirectionalRange interface represents a <a>selection</a> range.</p>
       <pre class="idl">
-        interface Selection {
-          readonly attribute Node? anchorNode;
-          readonly attribute unsigned long anchorOffset;
-          readonly attribute Node? focusNode;
-          readonly attribute unsigned long focusOffset;
+        interface DirectionalRange {
+          readonly attribute Node baseNode;
+          readonly attribute unsigned long baseOffset;
+          readonly attribute Node extentNode;
+          readonly attribute unsigned long extentOffset;
           readonly attribute boolean isCollapsed;
-          readonly attribute unsigned long rangeCount;
-          readonly attribute DOMString type;
-          Range getRangeAt(unsigned long index);
-          void addRange(Range range);
-          void removeRange(Range range);
-          void removeAllRanges();
-          void empty();
-          void collapse(Node? node, optional unsigned long offset = 0);
-          void setPosition(Node? node, optional unsigned long offset = 0);
-          void collapseToStart();
-          void collapseToEnd();
-          void extend(Node node, optional unsigned long offset = 0);
-          void setBaseAndExtent(Node anchorNode, unsigned long anchorOffset, Node focusNode, unsigned long focusOffset);
-          void selectAllChildren(Node node);
-          [CEReactions]
-          void deleteFromDocument();
-          boolean containsNode(Node node, optional boolean allowPartialContainment = false);
-          stringifier DOMString ();
         };
       </pre>
       <dl>
-        <dt><dfn>anchorNode</dfn></dt>
+        <dt><dfn>baseNode</dfn></dt>
         <dd>
-          <p>The attribute must return the <a>anchor</a> <dfn><a href="https://www.w3.org/TR/dom/#concept-node">node</a></dfn> ([[!DOM]])
-          of the <dfn><a href="https://www.w3.org/TR/dom/#context-object">context object</a></dfn> ([[!DOM]]),
-          or <code>null</code> if the <a>anchor</a> is null.</p>
+          <p>The attribute must return the <a>base</a> <dfn><a href="https://www.w3.org/TR/dom/#concept-node">node</a></dfn> ([[!DOM]])
+          of the <dfn><a href="https://www.w3.org/TR/dom/#context-object">context object</a></dfn> ([[!DOM]]).
         </dd>
 
-        <dt><dfn>anchorOffset</dfn></dt>
+        <dt><dfn>baseOffset</dfn></dt>
         <dd>
-          <p>The attribute must return the <a>anchor</a> <dfn><a href="https://www.w3.org/TR/dom/#concept-range-bp-offset">offset</a></dfn> ([[!DOM]])
-          of the <a>context object</a>, or <code>0</code> if the <a>anchor</a> is null.</p>
+          <p>The attribute must return the <a>base</a> <dfn><a href="https://www.w3.org/TR/dom/#concept-range-bp-offset">offset</a></dfn> ([[!DOM]])
+          of the <a>context object</a>.</p>
         </dd>
 
-        <dt><dfn>focusNode</dfn></dt>
+        <dt><dfn>extentNode</dfn></dt>
         <dd>
-          <p>The attribute must return the <a>focus</a> <a>node</a> of the <a>context object</a>,
-          or <code>null</code> if the <a>anchor</a> is null.</p>
+          <p>The attribute must return the <a>extent</a> <a>node</a> of the <a>context object</a>.</p>
         </dd>
 
-        <dt><dfn>focusOffset</dfn></dt>
+        <dt><dfn>extentOffset</dfn></dt>
         <dd>
-          <p>The attribute must return the <a>focus</a> <a>offset</a> of the <a>context object</a>,
-          or <code>0</code> if the <a>focus</a> is null.</p>
+          <p>The attribute must return the <a>extent</a> <a>offset</a> of the <a>context object</a>.</p>
         </dd>
 
         <dt><dfn>isCollapsed</dfn></dt>
         <dd>
-          <p>The attribute must return true if and only if the <span>anchor</span> and <span>focus</span> are the same (including if both are null).
-          Otherwise it must return false.</p>
+          <p>The attribute must return true if and only if <a>context object</a>'s <a>base</a> equals <a>extent</a>. Otherwise it must return false.</p>
         </dd>
+      </dl>
+    </section>
 
-        <dt><dfn>rangeCount</dfn></dt>
+    <section data-dfn-for="FrameSelection">
+      <h2>FrameSelection interface</h2>
+      <p>FrameSelection interface provides a way to interact with the <a>selection</a>
+        associated with each window.
+      </p>
+
+      <pre class="idl">
+        interface FrameSelection {
+          DirectionalRange? getRange(optional sequence&lt;ShadowRoot&gt; disclosedShadows = []);
+          void clear();
+          void setBaseAndExtent(Node baseNode, unsigned long baseOffset, Node extentNode, unsigned long extentOffset);
+        };
+      </pre>
+      <dl>
+        <dt><dfn>getRange</dfn></dt>
         <dd>
-          <p>The attribute must return <code>0</code> if the <a>context object</a> is <a>empty</a>,
-          and must return <code>1</code> otherwise.</p>
-        </dd>
-
-        <dt><dfn>type</dfn></dt>
-        <dd>
-          <p>The attribute must return <code>"None"</code> if the <a>context object</a> is <a>empty</a>,
-          <code>"Caret"</code> if the <a>context object</a>'s <a>range</a> is <a>collapsed</a>,
-          and <code>"Range"</code> otherwise.</p>
-        </dd>
-
-        <dt><dfn>getRangeAt</dfn></dt>
-        <dd>
-          <p>The method must throw an <dfn><a href="https://www.w3.org/TR/dom/#indexsizeerror"><code>IndexSizeError</code></a></dfn> ([[!DOM]]) exception
-          if <var>index</var> is not <code>0</code>, or if the <a>context object</a> is <a>empty</a>.
-          Otherwise, it must return a reference to (not a copy of) the <a>context object</a>'s <a>range</a>.</p>
-
-          <p class=note>Thus subsequent calls of this method returns the same <a>range</a> object
-            if nothing has removed the <a>context object</a>'s range in the meantime.
-            In particular, <code>getSelection().getRangeAt(0) === getSelection().getRangeAt(0)</code> evaluates to <code>true</code>
-            if the <a>selection</a> is not <a>empty</a>.</p>
-
-          <p class=note>IE9 and Firefox 4.0 return the same object every time, as the spec says.
-            Chrome 12 dev and Opera 11.10 return a different object every time.</p>
-        </dd>
-  
-        <dt><dfn>addRange</dfn></dt>
-        <dd>
-          <p>The method must follow these steps:</p>
+          <p>The method must follow these steps.</p>
           <ol>
-            <li>If the <dfn><a href="https://www.w3.org/TR/dom/#concept-tree-root">root</a></dfn> ([[!DOM]])
-                of the <var>range</var>'s boundary points are not the <a>document</a> associated with <a>context object</a>,
-                abort these steps.</li>
-            <li>If <code>rangeCount</code> is not <code>0</code>, abort these steps.</li>
-            <li>Set the <a>context object</a>'s range to <var>range</var> by a strong reference
-                (not by making a copy).</li>
-          </ol>
-
-          <p class=note>Since <a>range</a> is added by reference, subsequent calls to <code>getRangeAt(0)</code> returns the same object,
-            and any changes that a script makes to <a>range</a> after it is added must be reflected in the <a>selection</a>,
-            until something else removes or replaces the <a>context object</a>'s <a>range</a>.
-            In particular, the <a>selection</a> will contain <var>b</var> as opposed to <var>a</var> after running the following code:
-            <code>var r = document.createRange(); r.selectNode(a); getSelection().addRange(r); r.selectNode(b);</code></p>
-
-          <div class=note>
-          <p>At Step 2,
-            Chrome 58 and Edge 25 do nothing.
-            Firefox 51 gives you a multi-range selection.
-            At least they keep the exisiting <a>range</a>.</p>
-          <p>At Step 3,
-            Chrome 58 and Firefox 51 store a reference, as described here.
-            Edge 25 stores a copy.
-            Firefox 51 changes its selection if the <a>range</a> is modified. </p>
-          </div>
-        </dd>
-  
-        <dt><dfn>removeRange</dfn></dt>
-        <dd>
-          <p>The method must make the <a>context object</a> <a>empty</a> by disassociating its <a>range</a>
-            if the <a>context object</a>'s <a>range</a> is <var>range</var>.
-            Otherwise, it must throw a
-            <a href="https://heycam.github.io/webidl/#notfounderror">NotFoundError</a>.</p>
-        </dd>
-
-        <dt><dfn>removeAllRanges</dfn></dt>
-        <dd>
-          <p>The method must make the <a>context object</a> <a>empty</a> by disassociating its <a>range</a>
-            if the <a>context object</a> has an associated <a>range</a>.</p>
-        </dd>
-
-        <dt><dfn>empty</dfn></dt>
-        <dd>
-            <p>The method must be an alias, and behave identically, to <code>removeAllRanges()</code>.</p>
-        </dd>
-
-        <dt><dfn>collapse</dfn></dt>
-        <dd>
-          <p>The method must follow these steps:</p>
-          <ol>
-            <li>If <var>node</var> is null, this method must behave identically as <code>removeAllRanges()</code> and abort these steps.</li>
-            <li>The method must throw an <a>IndexSizeError</a> exception if <var>offset</var> is longer than <var>node</var>'s
-              <dfn><a href="https://www.w3.org/TR/dom/#concept-node-length">length</a></dfn> ([[!DOM]]) and abort these steps.</li>
-            <li>If <var>node</var>'s <a>root</a> is not the <a>document</a> associated with the <a>context object</a>, abort these steps.</li>
-            <li>Otherwise, let <var>newRange</var> be a new <a>range</a>.</li>
-            <li><dfn id="range-set"><a href="https://www.w3.org/TR/dom/#concept-range-bp-set">Set</a></dfn> ([[!DOM]])
-              the <a href="#range-start">start</a> and the <a href="#range-end">end</a> of <var>newRange</var> to (<var>node</var>, <var>offset</var>).</li>
-            <li>Set the <a>context object</a>'s <a>range</a> to <var>newRange</var>.</li>
+            <li>If <a>selection</a> is <a>empty</a>, return null. </li>
+            <li> Let <var>range base node</var> and <var>range base offset</var> be <a>base</a> node and <a>base</a> offset.
+              <ol>
+                <li> Let node be range base node.</li>
+                <li> If node's root is document, abort this step. </li>
+                <li> The root must be ShadowRoot. If the root is in disclosedShadows, abort this step.</li>
+                <li> If the root is closed ShadowRoot, let node be its host. Go back to step 2. </li>
+                <li> Set  <var>range base node</var> be node and <var>range base offset</var> be 0. </li>
+              </ol>              
+            </li>
+            <li> Ditto to <var>range extent node</var> and <var>range extent offset</var>.</li>
+            <li>Return DirectionalRange of <var>range base node</var>, <var>range base offset</var>, <var>range extent node</var> and <var>range extent offset</var>. </li>
           </ol>
         </dd>
 
-        <dt><dfn>setPosition</dfn></dt>
+        <dt><dfn>clear</dfn></dt>
         <dd>
-            <p>The method must be an alias, and behave identically, to <code>collapse()</code>.</p>
-        </dd>
-
-        <dt><dfn>collapseToStart</dfn></dt>
-        <dd>
-          <p>The method must throw <dfn><a href="https://www.w3.org/TR/dom/#invalidstateerror"><code>InvalidStateError</code></a></dfn> ([[!DOM]]) exception
-          if the <a>context object</a> is <a>empty</a>.
-          Otherwise, it must create a new <a>range</a>, <a href="#range-set">set</a> both its <a href="#range-start">start</a> and <a href="#range-end">end</a>
-          to the <a href="#range-start">start</a> of the <a>context object</a>'s <a>range</a>,
-          and then set the <a>context object</a>'s <a>range</a> to the newly-created <a>range</a>.</p>
-
-          <p class=note>For collapseToStart/End, IE9 mutates the existing range, while Firefox 9.0a2 and Chrome 15 dev replace it with a new one.
-            The spec follows the majority and replaces it with a new one, leaving the old Range object unchanged.</p>
-        </dd>
-
-        <dt><dfn>collapseToEnd</dfn></dt>
-        <dd>
-          <p>The method must throw <a>InvalidStateError</a> exception if the <a>context object</a> is <a>empty</a>.
-          Otherwise, it must create a new <a>range</a>, <a href="#range-set">set</a> both its <a href="#range-start">start</a> and <a href="#range-end">end</a>
-          to the <a href="#range-end">end</a> of the <a>context object</a>'s <a>range</a>,
-          and then set the <a>context object</a>'s <a>range</a> to the newly-created <a>range</a>.</p>
-        </dd>
-
-        <dt><dfn>extend</dfn></dt>
-        <dd>
-          <p>The method must follow these steps:</p>
-          <ol>
-            <li>If <var>node</var>'s <a>root</a> is not the <a>document</a> associated with the <a>context object</a>, abort these steps.</li>
-            <li>If the <a>context object</a> is <a>empty</a>, throw an <a>InvalidStateError</a> exception and abort these steps.</li>
-            <li>Let <var>oldAnchor</var> and <var>oldFocus</var> be the <a>context object</a>'s <a>anchor</a> and <a>focus</a>,
-              and let <var>newFocus</var> be the <a>boundary point</a> (<var>node</var>, <var>offset</var>).</li>
-            <li>Let <var>newRange</var> be a new <a>range</a>.</li>
-            <li>If <var>node</var>'s <a>root</a> is not the same as
-              the <a>context object</a>'s <a>range</a>'s <a>root</a>, <a href="#range-set">set</a> <var>newRange</var>'s
-              <a href="#range-start">start</a> and <a href="#range-end">end</a> to <var>newFocus</var>.</li>
-            <li>Otherwise, if <var>oldAnchor</var> is <a>before</a> or equal to <var>newFocus</var>,
-              <a href="#range-set">set</a> <var>newRange</var>'s <a href="#range-start">start</a> to <var>oldAnchor</var>,
-              then <a href="#range-set">set</a> its <a href="#range-end">end</a> to <var>newFocus</var>.</li>
-            <li>Otherwise, <a href="#range-set">set</a> <var>newRange</var>'s <a href="#range-start">start</a> to <var>newFocus</var>,
-              then <a href="#range-set">set</a> its <a href="#range-end">end</a> to <var>oldAnchor</var>.</li>
-            <li>Set the <a>context object</a>'s <a>range</a> to <var>newRange</var>.</li>
-            <li>If <var>newFocus</var> is <a>before</a> <var>oldAnchor</var>, set the <a>context object</a>'s <a>direction</a> to <a>backwards</a>.
-              Otherwise, set it to <a>forwards</a>.</li>
-          </ol>
-          <p class=note>Reverse-engineered circa January 2011.
-            IE doesn't support it, so I'm relying on Firefox (implemented extend() sometime before 2000) and WebKit (implemented extend() in 2007).
-            I'm mostly ignoring Opera, because gsnedders tells me its implementation isn't compatible.
-
-            Firefox 12.0a1 seems to mutate the existing range.
-            IE9 doesn't support extend(), and it's impossible to tell whether Chrome 17 dev or Opera Next 12.00 alpha mutate or replace,
-            because getRangeAt() returns a copy anyway.
-            Nevertheless, I go against Gecko here, to be consistent with collapse().</p>
+            <p>The method must make the <a>context object</a> <a>empty</a> by clearing 
+              <a>context object</a>'s <a>base</a> and <a>extent</a>.</p>
         </dd>
 
         <dt><dfn>setBaseAndExtent</dfn></dt>
         <dd>
           <p>The method must follow these steps:</p>
           <ol>
-            <li>If <var>anchorOffset</var> is longer than <var>anchorNode</var>'s <a>length</a>
-              or if <var>focusOffset</var> is longer than <var>focusNode</var>'s <a>length</a>,
+            <li>If <var>baseOffset</var> is longer than <var>baseNode</var>'s <a>length</a>
+              or if <var>extentOffset</var> is longer than <var>extentNode</var>'s <a>length</a>,
               throw an <a>IndexSizeError</a> exception and abort these steps.</li>
-            <li>If the <a>root</a>s of <var>anchorNode</var> or <var>focusNode</var> are not the <a>document</a> associated with <a>context object</a>,
+            <li>If the <a>root</a>s of <var>baseNode</var> or <var>extentNode</var> are not the <a>document</a> associated with <a>context object</a>,
               abort these steps.</li>
-            <li>Let <var>anchor</var> be the <a>boundary point</a> (<var>anchorNode</var>, <var>anchorOffset</var>)
-              and let <var>focus</var> be the <a>boundary point</a> (<var>focusNode</var>, <var>focusOffset</var>).</li>
+            <li>Let <var>base</var> be the <a>boundary point</a> (<var>baseNode</var>, <var>baseOffset</var>)
+              and let <var>extent</var> be the <a>boundary point</a> (<var>extentNode</var>, <var>extentOffset</var>).</li>
             <li>Let <var>newRange</var> be a new <a>range</a>.</li>
-            <li>If <var>anchor</var> is <a>before</a> <var>focus</var>,
-              <a href="#range-set">set</a> the <var>newRange</var>'s <a href="#range-start">start</a> to <var>anchor</var>
-              and its <a href="#range-end">end</a> to <var>focus</var>.
-              Otherwise, <a href="#range-set">set</a> them to <var>focus</var> and <var>anchor</var> respectively.</li>
+            <li>If <var>base</var> is <a>before</a> <var>extent</var>,
+              <a href="#range-set">set</a> the <var>newRange</var>'s <a href="#range-start">start</a> to <var>base</var>
+              and its <a href="#range-end">end</a> to <var>extent</var>.
+              Otherwise, <a href="#range-set">set</a> them to <var>extent</var> and <var>base</var> respectively.</li>
             <li>Set the <a>context object</a>'s <a>range</a> to <var>newRange</var>.</li>
-            <li>If <var>focus</var> is <a>before</a> <var>anchor</var>, set <a>context object</a>'s <a>direction</a> to <a>backwards</a>.
+            <li>If <var>extent</var> is <a>before</a> <var>base</var>, set <a>context object</a>'s <a>direction</a> to <a>backwards</a>.
               Otherwise, set it to <a>forwards</a></li>
-        </dd>
-
-        <dt><dfn>selectAllChildren</dfn></dt>
-        <dd>
-          <p>The method must follow these steps:</p>
-          <ol>
-            <li>If <var>node</var>'s <a>root</a> is not the <a>document</a> associated with the <a>context object</a>, abort these steps.</li>
-            <li>Let <var>newRange</var> be a new <a>range</a> and <var>nodeLength</var> be the <a>length</a> of <var>node</var>.</li>
-            <li>Set <var>newRange</var>'s <a href="#range-start">start</a> to (<var>node</var>, <code>0</code>).</li>
-            <li>Set <var>newRange</var>'s <a href="#range-end">end</a> to (<var>node</var>, <var>nodeLength</var>).</li>
-            <li>Set the <a>context object</a>'s <a>range</a> to <var>newRange</var>.</li>
-            <li>Set the <a>context object</a>'s <a>direction</a> to <var>forwards</var>.</li>
           </ol>
-  
-          <div class=note>
-          <p>Based mostly on Firefox 9.0a2.  It has a bug that I didn't reproduce, namely
-          that if you pass a Document as the argument, the end offset becomes 1 instead
-          of the number of children it has.  It also throws a RangeException instead of
-          DOMException, because its implementation predated their merging.
-
-          <p>IE9 behaves similarly but with glitches.  It throws "Unspecified error." if
-          the node is detached or display:none, and apparently in some random other cases
-          too.  It throws "Invalid argument." for detached comments (only!).  Finally, if
-          you pass it a comment, it seems to select the whole comment, unlike with text
-          nodes.
-
-          <p>Chrome 16 dev behaves as you'd expect given its Selection implementation.
-          It refuses to select anything that's not visible, so it's almost always wrong.
-          Opera 11.50 just does nothing in all my tests, as usual.
-
-          <p>The new range replaces any existing one, doesn't mutate it.
-          This matches IE9 and Firefox 12.0a1.  (Chrome 17 dev and Opera Next 12.00
-          alpha can't be tested, because getRangeAt() returns a copy anyway.)
-          </div>
-        </dd>
-
-        <dt><dfn>deleteFromDocument</dfn></dt>
-        <dd>
-          <p>The method must invoke <dfn><a href="https://dom.spec.whatwg.org/#dom-range-deletecontents"><code>deleteContents()</code></a></dfn> ([[!DOM]])
-          on the <a>context object</a>'s <a>range</a> if the <a>context object</a> is not <a>empty</a>.
-          Otherwise the method must do nothing.</p>
-  
-          <p class=note>This is the one method that actually mutates the range instead of replacing it.
-            This matches IE9 and Firefox 12.0a1. (Chrome 17 dev and Opera Next 12.00 alpha can't be tested,
-            because getRangeAt() returns a copy anyway.)</p>
-        </dd>
-
-        <dt><dfn>containsNode</dfn></dt>
-        <dd>
-          <p>The method must return <code>false</code> if the <a>context object</a> is <a>empty</a>
-            or if <var>node</var>'s <a>root</a> is not the document associated with the <a>context object</a>.</p>
-
-          <p>Otherwise, if <var>allowPartialContainment</var> is <code>false</code>,
-          the method must return <code>true</code> if and only if
-          <a href="#range-start">start</a> of its <a>range</a> is <a>before</a> or visually equivalent to
-            the first <a>boundary point</a> in the <var>node</var>
-            <strong>and</strong> <a href="#range-end">end</a> of its <a>range</a> is <a>after</a> or visually equivalent to
-            the last <a>boundary point</a> in the <var>node</var>.</p>
-
-          <p>If <var>allowPartialContainment</var> is <code>true</code>,
-          the method must return <code>true</code> if and only if
-          <a href="#range-start">start</a> of its <a>range</a> is <a>before</a> or visually equivalent to
-            the first <a>boundary point</a> in the <var>node</var>
-            <strong>or</strong> <a href="#range-end">end</a> of its <a>range</a> is <a>after</a> or visually equivalent to
-            the last <a>boundary point</a> in the <var>node</var>.</p>
-        </dd>
-
-        <dt>stringifier</dt>
-        <dd>
-          See <a href="https://www.w3.org/Bugs/Public/show_bug.cgi?id=10583">W3C bug 10583</a>.
         </dd>
       </dl>
 
