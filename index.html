@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>FrameSelection API</title>
+    <title>ComposedSelection API</title>
     <meta charset='utf-8'>
     <script src='https://www.w3.org/Tools/respec/respec-w3c-common' async class='remove'></script>
     <script class='remove'>
       var respecConfig = {
         specStatus: "ED",
-        shortName: "frameselection",
+        shortName: "ComposedSelection",
         editors: [
           {
             name: "Yoichi Osato",
@@ -25,12 +25,17 @@
         github: "TBD",
       };
     </script>
+    <style>
+      ol.nest { counter-reset: item }
+      ol.nest li { display: block }
+      ol.nest li:before { content: counters(item, ".") "."; counter-increment: item }
+    </style>
   </head>
   <body>
     <section id='abstract'>
       <p>
-        This document is a preliminary draft of a specification for the FrameSelection API and selection related functionality.
-        FrameSelection enables web authors to get/set selection
+        This document is a preliminary draft of a specification for the ComposedSelection API and selection related functionality.
+        ComposedSelection enables web authors to get/set selection
         considering <a href="https://www.w3.org/TR/dom41/#dom-element-attachshadow">Shadow DOM</a>.
       </p>
       <p>
@@ -54,21 +59,79 @@
     <section class="informative">
       <h2>Background</h2>
 
-      <p>Chrome69, Safari12 and Firefox64 support Shadow DOM.
-        However, current Selection API specifies that there is single selection in a document and the selection is bound to
-         single <a href="https://dom.spec.whatwg.org/#range">Range</a>, which can't represent a range crossing shadow boundary. <br>
-        Chrome69 supports user selection crossing/inside shadow and copy/paste but web authors can't get the selected nodes through
-        Selection API because of the limitation. document.getSelection() and shadowRoot.getSelection() only work well if selection is only inside each tree scope. <br>
+      <p>Chrome69, Safari12 and Firefox64 support Shadow DOM.<br>
+        Chrome69 supports user selection crossing/inside shadow and copy/paste. 
+        document.getSelection() and shadowRoot.getSelection() only work well if selection is inside a single node tree. <br>
         Safari12 supports user selection crossing/inside shadow and it doesn't support shadowRoot.getSelection(). <br>
-        Firefox64 supports user selection inside shadow and it doesn't support shadowRoot.getSelection(). <br>
-        Since current Selection API deeply depends on Range, it is hard to update existing Selection API following shadow tree.</p>
+        Firefox64 supports user selection inside shadow and it doesn't support shadowRoot.getSelection(). </p>
+      <p>
+        Existing <a href="http://w3c.github.io/selection-api/">Selection API</a> specifies that there is single selection in a document and the selection is bound to
+        single <a href="https://dom.spec.whatwg.org/#range">Range</a>, which can't represent a range over composed tree. <br> 
+        For backward compatibility, we can't update <a href="http://w3c.github.io/selection-api/">Selection API</a> so that it can get/set nodes in other node trees. </p>
 
-      <p>So I suggest new selection API that lets web authors to get/set user selection including shadow.</p>
-
-      <p> Multiple range and selection reaction to DOM mutation is TBD.</p>
+      <p>So I suggest new API that lets web authors to control selection in composed tree.</p>
 
       <div class=note>
       <p>See <a href="https://github.com/w3c/webcomponents/issues/79">webcomponents issue 79</a> for more history and detail.</p>
+      </div>
+
+      <p>This API is intent to get/set fine-grain selection range while keeping document.getSelection() compatibility and ShadowRoot closeness.</p>
+      <div class="example">
+      <pre><code class="lang-html">
+&lt;!DOCTYPE html>
+&lt;script>
+customElements.define('x-editor', class extends HTMLElement {
+  constructor() {
+    super();
+    let input = document.createElement('input');
+    let div = document.createElement('div');
+    div.contenteditable = true;
+    div.innerHTML = "initial text";
+    this.appendChild(input);
+    this.appendChild(div);
+    // &lt;input>
+    // &lt;div>initial text&lt;/div>
+    input.value = "selectall";
+    input.onlick = () => {
+      let range = document.createRange();
+      range.setStart(div, 0);
+      range.setEnd(div, 1);
+      document.getselection().addRange(range);
+    };
+  }
+});
+&lt;/script>
+&lt;x-editor>&lt;/x-editor>
+      </code></pre>
+
+      This x-editor element creates a tyny editor having "selectall" button.
+      However this won't work if this element is composed in shadow.
+      <pre><code class="lang-html">
+&lt;!DOCTYPE html>
+&lt;script>
+customElements.define('big-component', class extends HTMLElement {
+  constructor() {
+    super();
+    let shadow = this.attachShadow({mode:"open"});
+    shadow.innerHTML = '
+    &lt;x-editor>&lt;/x-editor>
+    &lt;baz-element>&lt;/baz-element>
+    &lt;foo-element>&lt;/foo-element>
+    ';
+    };
+  }
+});
+&lt;/script>
+&lt;big-component>&lt;/big-component>
+      </code></pre>
+
+      This doesn't work because div in x-editor is inside Shadow tree, <code>range.setStart(div,0)</code> prohibits it.
+      Furthermore, big-component author nor top page auther can't get selection range if the div is selected even big-component's ShadowRoot is open.
+      Plus, even if an enclosing ShadowRoot is closed, editor author want to manage selection.
+      </div>
+
+      <div class="example">
+        Some selection sample for crossing Shadow.
       </div>
     </section>
 
@@ -95,28 +158,25 @@
         in a <dfn><a href="https://www.w3.org/TR/html5/browsers.html#browsing-context">browsing context</a></dfn> ([[!HTML]])
         has a unique <dfn>selection</dfn> associated with it.</p>
 
-      <p><dfn>Directional range</dfn> is range that has two <a href="https://www.w3.org/TR/dom/#concept-range-bp"><dfn>boundary point</dfn></a>s: <dfn>base</dfn> and <dfn>extent</dfn>.</p>
+      <p>Each <a>selection</a> can be associated with a <dfn>selection range</dfn>, which has two <a href="https://www.w3.org/TR/dom/#concept-range-bp"><dfn>boundary point</dfn></a>s: <dfn>base</dfn> and <dfn>extent</dfn>.
+         When there is no <a>selection range</a> associated with the <a>selection</a>, the </a>selection</a> is <dfn>empty</dfn>.
+        The selection must be initially <a>empty</a>.
+      </p>
       <p class=note>base node and extent node can be in different node tree and no order consraint between them unlike DOM <dfn data-cite="!DOM#range">range</dfn>.</p>
 
-      <p>This one <a>selection</a> must be shared by all the content of the <a>document</a> and its shadow tree
+      <p>This one <a>selection</a> must be shared by all the content of the <a>document</a> and its shadow trees
         (though not by nested <a>browsing context</a>s)</p>
-
-      <p>Each <a>selection</a> can be associated with a single <a>directional range</a>.
-          When there is no <a>directional range</a> associated with the <a>selection</a>, the </a>selection</a> is <dfn>empty</dfn>.
-          The selection must be initially <a>empty</a>.</p>
-
     </section>
 
-    <section data-dfn-for="DirectionalRange">
-      <h2>DirectionalRange interface</h3>
-      <p>DirectionalRange interface represents a <a>selection</a> range.</p>
+    <section data-dfn-for="SelectionRange">
+      <h2>SelectionRange interface</h3>
+      <p>SelectionRange interface represents a <a>selection range</a>.</p>
       <pre class="idl">
-        interface DirectionalRange {
+        interface SelectionRange {
           readonly attribute Node baseNode;
           readonly attribute unsigned long baseOffset;
           readonly attribute Node extentNode;
           readonly attribute unsigned long extentOffset;
-          readonly attribute boolean isCollapsed;
         };
       </pre>
       <dl>
@@ -141,23 +201,21 @@
         <dd>
           <p>The attribute must return the <a>extent</a> <a>offset</a> of the <a>context object</a>.</p>
         </dd>
-
-        <dt><dfn>isCollapsed</dfn></dt>
-        <dd>
-          <p>The attribute must return true if and only if <a>context object</a>'s <a>base</a> equals <a>extent</a>. Otherwise it must return false.</p>
-        </dd>
       </dl>
+      <div class=note>
+        This could be compatible to Range if both node is in a node tree?
+      </div>
     </section>
 
-    <section data-dfn-for="FrameSelection">
-      <h2>FrameSelection interface</h2>
-      <p>FrameSelection interface provides a way to interact with the <a>selection</a>
+    <section data-dfn-for="ComposedSelection">
+      <h2>ComposedSelection interface</h2>
+      <p>ComposedSelection interface provides a way to interact with the <a>selection</a>
         associated with each window.
       </p>
 
       <pre class="idl">
-        interface FrameSelection {
-          DirectionalRange? getRange(optional sequence&lt;ShadowRoot&gt; disclosedShadows = []);
+        interface ComposedSelection {
+          SelectionRange? getRange(optional sequence&lt;ShadowRoot&gt; disclosedShadows = []);
           void clear();
           void setBaseAndExtent(Node baseNode, unsigned long baseOffset, Node extentNode, unsigned long extentOffset);
         };
@@ -166,24 +224,40 @@
         <dt><dfn>getRange</dfn></dt>
         <dd>
           <p>The method must follow these steps.</p>
-          <ol>
+          <ol class=nest>
             <li>If <a>selection</a> is <a>empty</a>, return null. </li>
-            <li> Let <var>range base node</var> and <var>range base offset</var> be <a>base</a> node and <a>base</a> offset.
-              <ol>
-                <li> Let node be range base node.</li>
-                <li> If node's root is document, abort this step. </li>
-                <li> The root must be ShadowRoot. If the root is in disclosedShadows, abort this step.</li>
-                <li> If the root is closed ShadowRoot, let node be its host. Go back to step 2. </li>
-                <li> Set  <var>range base node</var> be node and <var>range base offset</var> be 0. </li>
+            <li> Let <var>range base node</var> be <a>base</a> node and <var>range base offset</var> be <a>base</a> offset.</li>
+            <li> If <var>range base node</var>'s root is not document, repeat following steps:
+              <ol class=nest>
+                <li> Let <var>root</var> be <var>range base node</var>'s root.</li>
+                <li> The root must be ShadowRoot. If the root is in <var>disclosedShadows</var>, abort this step.</li>
+                <li> If the root is closed ShadowRoot, Set range base node be its host and range base offset 0.</li>
+                <li> Set root be the root's host's root.
+                <li> If root is document, abort this step. Otherwise, Go back to step 3.2. </li>
               </ol>              
             </li>
             <li> Ditto to <var>range extent node</var> and <var>range extent offset</var>.</li>
-            <li>Return DirectionalRange of <var>range base node</var>, <var>range base offset</var>, <var>range extent node</var> and <var>range extent offset</var>. </li>
+            <li>Return SelectionRange of <var>range base node</var>, <var>range base offset</var>, <var>range extent node</var> and <var>range extent offset</var>. </li>
           </ol>
           <div class=note>
-            If no closed ShadowRoot in document, getRange() must return exact <a>base</a> and <a>extent</a>.
-            If there is a closed ShadowRoot ancestor of each node, this method adopts the host node of shadowest closed ShadowRoot.
-            If web author has a reference of a closed ShadowRoot, getRange(closedRoot) return as the ShadowRoot is open.
+            getRange is intent to get fine-grain range while keeping document.getSelection() compatibility and ShadowRoot closeness.
+            <ol>
+              <li>If no closed ShadowRoot ancestor of <a>base</a> and <a>extent</a>, 
+                <ol>
+                  <li> getRange() must return exact <a>base</a> and <a>extent</a>.</li>
+                  <li> Plus if base and extent has same root, the SelectionRange must be converted to Range even in ShadowRoot.</li>
+                </ol>
+              </li>
+            <li>If there is a closed ShadowRoot ancestor of each node,
+              <ol>
+                <li> This method adopts the host node of shallowest closed ShadowRoot while considering shadow roots in disclosedShadows as accessible. </li>
+                <li> If web author has a reference of a closed ShadowRoot and selection is inside the root, getRange(closedRoot) return virtually Range of the ShadowRoot. </li>
+              </ol>               
+            </li>
+            </ol>
+            <pre class='example highlight'>
+      
+             </pre>
           </div>
         </dd>
 
@@ -230,11 +304,11 @@
         <h3>Extensions to <code>Window</code> interface</h3>
         <pre class="idl">
           partial interface Window {
-            FrameSelection ? getFrameSelection();
+            ComposedSelection ? getComposedSelection();
           };
         </pre>
         <dl>
-          <dt><dfn>getFrameSelection()</dfn></dt>
+          <dt><dfn>getComposedSelection()</dfn></dt>
           <dd>
             <p>The method must return the <a>selection</a> associated with <a>context object</a>
               if the <a>context object</a> has an associated <a>browsing context</a>,
@@ -258,7 +332,7 @@
 
       <p>The user agent should allow the user to change the <a>selection</a> associated with the <dfn>active document</dfn>
         (<a href="https://www.w3.org/TR/html5/browsers.html#active-document">defined</a> in [[!HTML]]).
-        If the user makes any modification to a <a>selection</a>, <a>FrameSelection</a> must refer the updated <a>selection</a>.
+        If the user makes any modification to a <a>selection</a>, <a>ComposedSelection</a> must refer the updated <a>selection</a>.
 
       <p>The user agent must not make a <a>selection</a> <a>empty</a> if it was not already <a>empty</a>
         in response to any user actions (e.g. clicking on a non-editable region).</p>
